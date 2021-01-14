@@ -37,22 +37,47 @@
 #define calloc mm_calloc
 #endif /* def DRIVER */
 
-/* single word (4) or double word (8) alignment */
-#define ALIGNMENT 8
+#define WSIZE 8 /*Word and header/footer size(bytes) in 64 bit machine*/
+#define DSIZE 16 
+#define CHUNKSIZE (1<<12) /*one extension of heap*/
+#define MAX(x, y) ((x) > (y)? (x) : (y))
 
-/* rounds up to the nearest multiple of ALIGNMENT */
-#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+/* Pack a size and allocated bit into a word */
+#define PACK(size, alloc) ((size) | (alloc))
 
+/* Read and write word at address p*/
+#define GET(p) (*(unsigned long *)(p))
+#define PUT(p, val) (*(unsigned long *)(p) = (val))
 
-#define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+/*Read the size and allocated fields from address p*/
+#define GET_SIZE(p) (GET(p) & ~0x7)
+#define GET_ALLOC(p) (GET(p) & 0x1)
 
-#define SIZE_PTR(p)  ((size_t*)(((char*)(p)) - SIZE_T_SIZE))
+/* Given block ptr bp, compute address of its header and footer */
+#define HDRP(bp) ((char *)(bp) - WSIZE)
+#define FTRP(bp) ((char *)(bp) + GETSIZE(HDRP(bp)) - DSIZE)
 
+/* Given block ptr bp, compute address of next and previous blocks */
+#define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
+#define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE))) /*check the previous footer*/
+
+/*global variable*/
+static char *heap_listp; /*dummy head pointer*/
 /*
  * mm_init - Called when a new trace starts.
  */
 int mm_init(void)
 {
+  if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1)
+    return -1;
+  PUT(heap_listp, 0);/* first one word placeholder*/
+  PUT(heap_listp + WSIZE, PACK(DSIZE, 1));/*dummy header*/
+  PUT(heap_listp + 2*WSIZE, PACK(DSIZE, 1));/*dummy footer*/
+  PUT(heap_listp + 3*WSIZE, PACK(0, 1));/*Epilogue header*/
+  // set the heap_listp to the dummy block
+  heap_listp += 2*WSIZE;
+  if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
+    return -1;
   return 0;
 }
 
