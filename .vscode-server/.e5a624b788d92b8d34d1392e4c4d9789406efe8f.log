@@ -1,0 +1,40 @@
+
+
+*
+* Visual Studio Code Server
+*
+* Reminder: You may only use this software with Visual Studio family products,
+* as described in the license https://aka.ms/vscode-remote/license
+*
+
+
+IP Address: 172.17.0.2
+Extension host agent listening on 35985
+
+
+[08:02:40] Extension host agent started.
+[08:02:40] [127.0.0.1][37defa02][ExtensionHostConnection] New connection established.
+[08:02:40] [127.0.0.1][93eeca61][ManagementConnection] New connection established.
+[08:02:40] Listing 0 persistent terminals, 0 total terminals
+[08:02:41] [127.0.0.1][37defa02][ExtensionHostConnection] <136> Launched Extension Host Process.
+[08:05:26] [127.0.0.1][93eeca61][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...
+Error: Unexpected SIGPIPE
+    at process.<anonymous> (/root/.vscode-server/bin/e5a624b788d92b8d34d1392e4c4d9789406efe8f/out/bootstrap.js:5:377)
+    at process.emit (events.js:223:5)
+[02:01:33] [127.0.0.1][93eeca61][ManagementConnection] Another client has connected, will shorten the wait for reconnection 5m before disposing...
+[02:01:33] [127.0.0.1][14d47684][ExtensionHostConnection] New connection established.
+[02:01:33] [127.0.0.1][14d47684][ExtensionHostConnection] <308> Launched Extension Host Process.
+[02:01:33] [127.0.0.1][2276e89b][ManagementConnection] New connection established.
+[02:01:56] [127.0.0.1][2276e89b][ManagementConnection] The client has disconnected gracefully, so the connection will be disposed.
+[02:01:57] [127.0.0.1][14d47684][ExtensionHostConnection] <308> Extension Host Process exited with code: 0, signal: null.
+[02:01:57] [127.0.0.1][b4c34ac9][ManagementConnection] New connection established.
+[02:01:57] [127.0.0.1][0426032d][ExtensionHostConnection] New connection established.
+[02:01:57] [127.0.0.1][0426032d][ExtensionHostConnection] <331> Launched Extension Host Process.
+[02:02:20] [127.0.0.1][b4c34ac9][ManagementConnection] The client has disconnected gracefully, so the connection will be disposed.
+[02:02:21] [127.0.0.1][0426032d][ExtensionHostConnection] <331> Extension Host Process exited with code: 0, signal: null.
+[02:06:33] [127.0.0.1][93eeca61][ManagementConnection] The reconnection short grace time of 5m has expired, so the connection will be disposed.
+[02:06:34] [127.0.0.1][37defa02][ExtensionHostConnection] <136> Extension Host Process exited with code: 0, signal: null.
+Last EH closed, waiting before shutting down
+[02:06:34] Last EH closed, waiting before shutting down
+Last EH closed, shutting down
+[02:11:34] Last EH closed, shutting down

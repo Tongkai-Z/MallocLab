@@ -1,0 +1,22 @@
+[2021-01-03 02:03:09.141] [remoteagent] [info] 
+
+*
+* Visual Studio Code Server
+*
+* Reminder: You may only use this software with Visual Studio family products,
+* as described in the license https://aka.ms/vscode-remote/license
+*
+
+
+[2021-01-03 02:03:09.141] [remoteagent] [info] Extension host agent started.
+[2021-01-03 02:03:09.250] [remoteagent] [info] [127.0.0.1][5d424bb7][ExtensionHostConnection] New connection established.
+[2021-01-03 02:03:09.271] [remoteagent] [info] [127.0.0.1][bef20c47][ManagementConnection] New connection established.
+[2021-01-03 02:03:09.299] [remoteagent] [info] Listing 0 persistent terminals, 0 total terminals
+[2021-01-03 02:03:09.317] [remoteagent] [error] [File Watcher (node.js)] Error: ENOENT: no such file or directory, stat '/root/shlab-handout/.vscode'
+[2021-01-03 02:03:09.631] [remoteagent] [info] [127.0.0.1][5d424bb7][ExtensionHostConnection] <559> Launched Extension Host Process.
+[2021-01-03 02:03:09.666] [remoteagent] [info] Installing extension: ms-azuretools.vscode-docker
+[2021-01-03 02:03:10.976] [remoteagent] [info] Downloaded extension: ms-azuretools.vscode-docker undefined
+[2021-01-03 02:03:11.985] [remoteagent] [info] Extracted extension to /root/.vscode-server/extensions/.ms-azuretools.vscode-docker-1.9.0: ms-azuretools.vscode-docker
+[2021-01-03 02:03:11.986] [remoteagent] [info] Renamed to /root/.vscode-server/extensions/ms-azuretools.vscode-docker-1.9.0
+[2021-01-03 02:03:12.001] [remoteagent] [info] Installation completed. ms-azuretools.vscode-docker
+[2021-01-03 02:03:12.735] [remoteagent] [info] Extensions installed successfully: ms-azuretools.vscode-docker
