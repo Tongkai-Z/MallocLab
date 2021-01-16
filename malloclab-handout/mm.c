@@ -76,28 +76,112 @@ int mm_init(void)
   PUT(heap_listp + 3*WSIZE, PACK(0, 1));/*Epilogue header*/
   // set the heap_listp to the dummy block
   heap_listp += 2*WSIZE;
+  // extend the heap in multiple of sizeof(size_t)
   if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
     return -1;
   return 0;
 }
 
+static void *extend_heap(size_t size) 
+{
+  char *bp;
+  size_t ext;
+  // convert the size to byte
+  // round up the size to meet the double words alignment requirement
+  ext = (size % 2)? WSIZE * (size + 1) : WSIZE * size;
+  if ((bp == mem_sbrk(ext)) == (void *)-1) {
+    return NULL;
+  }
+  // set the header and footer for the new block
+  PUT(HDRP(bp), PACK(ext, 0));
+  PUT(FTRP(bp), PACK(ext, 0));
+  // set Epilogue
+  PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
+
+  return coalesce(bp);
+}
+
+// this function checks the prev and next block to coalesce if possible
+static void *coalesce(char *bp)
+{
+  //get the free bit for prev and next
+  size_t next = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+  size_t prev = GET_ALLOC(HDRP(PREV_BLKP(bp)));
+  size_t cs = GET_SIZE(HDRP(bp));
+  if (next && prev) {
+    return bp;
+  } else if (next && !prev) {
+    size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
+    PUT(HDRP(PREV_BLKP(bp)), PACK(cs + ps, 0));
+    PUT(FTRP(bp), PACK(cs + ps, 0)); 
+    // set the bp to prev
+    bp = PREV_BLKP(bp);
+  } else if (!next && prev) {
+    size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
+    PUT(FTRP(NEXT_BLKP(bp)), PACK(cs + ns, 0));
+    PUT(HDRP(bp), PACK(cs + ns, 0)); 
+  } else {
+    size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
+    size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
+    size_t s = ps + ns + cs;
+    PUT(HDRP(PREV_BLKP(bp)), PACK(s, 0));
+    PUT(FTRP(NEXT_BLKP(bp)), PACK(s, 0));
+    bp = PREV_BLKP(bp);
+  }
+  return bp;
+}
+
 /*
  * malloc - Allocate a block by incrementing the brk pointer.
  *      Always allocate a block whose size is a multiple of the alignment.
+ * note that the allocated unit is word
+ * need consider splitting policy
  */
 void *malloc(size_t size)
 {
-  int newsize = ALIGN(size + SIZE_T_SIZE);
-  unsigned char *p = mem_sbrk(newsize);
-  //dbg_printf("malloc %u => %p\n", size, p);
-
-  if ((long)p < 0)
-    return NULL;
-  else {
-    p += SIZE_T_SIZE;
-    *SIZE_PTR(p) = size;
-    return p;
+  size_t asize; /* add the header and footer to size and align to DSIZE*/
+  size_t extendsize;
+  char *bp;
+  if (size < DSIZE) {
+    asize = DSIZE;
+  } else {
+    //ceil((size + WSIZE * 2)/WSIZE) * WSIZE
+    // payload + padding should be mutiple of DSIZE
+    asize = ((size + DSIZE + DSIZE - 1)/DSIZE) * DSIZE;
   }
+  if ((bp = find_fit(asize)) != NULL) {
+    place(bp, asize);
+    return bp;
+  }
+  extendsize = MAX(asize, CHUNKSIZE);
+  if ((bp = extend_heap(extendsize)) == NULL) {
+    return NULL;
+  }
+  place(bp, asize);
+}
+
+static void place(void *bp, size_t asize){
+  //payload + padding should be mutiple of DSIZE
+  size_t csize = GET_SIZE(HDRP(bp));
+  if ((csize - asize) >= DSIZE * 2) {
+    PUT(HDRP(bp), PACK(asize, 1));
+    PUT(FTRP(bp), PACK(asize, 1));
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
+    PUT(FTRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
+  } else { //no splitting
+    PUT(HDRP(bp), PACK(csize, 1));
+    PUT(FTRP(bp), PACK(csize, 1));
+  }
+}
+
+// use first-fit algs
+static void *find_fit(size_t asize) {
+  for (char *curr = heap_listp;GET_SIZE(HDRP(curr)) != 0;curr = NEXT_BLKP(curr)) {
+    if (GET_SIZE(HDRP(curr)) >= asize && !GET_ALLOC(HDRP(curr))) {
+      return curr
+    }
+  }
+  return NULL;
 }
 
 /*
@@ -106,7 +190,10 @@ void *malloc(size_t size)
  */
 void free(void *ptr){
 	/*Get gcc to be quiet */
-
+  size_t size = GET_SIZE(HDRP(ptr));
+  PUT(HDRP(ptr), PACK(size, 0));
+  PUT(FTRP(ptr), PACK(size, 0));
+  coalesce(ptr);
 }
 
 /*
@@ -138,7 +225,7 @@ void *realloc(void *oldptr, size_t size)
   }
 
   /* Copy the old data. */
-  oldsize = *SIZE_PTR(oldptr);
+  oldsize = GET_SIZE(HDRP(oldptr));
   if(size < oldsize) oldsize = size;
   memcpy(newptr, oldptr, oldsize);
 
