@@ -47,7 +47,7 @@
 
 /* Read and write word at address p*/
 #define GET(p) (*(unsigned long *)(p))
-#define PUT(p, val) (*(unsigned long *)(p) = ((unsigned long)( val)))
+#define PUT(p, val) (*(unsigned long *)(p) = ((unsigned long)(val)))
 
 /*Read the size and allocated fields from address p*/
 #define GET_SIZE(p) (GET(p) & ~0xf)
@@ -64,8 +64,8 @@
 /* Given block ptr bp, compute address of pred and succ*/
 #define PRED_PT(bp) ((char *)(bp))
 #define SUCC_PT(bp) ((char *)(bp) + WSIZE)
-#define GET_PRED(bp) (*((unsigned long *)(PRED_PT(bp))))
-#define GET_SUCC(bp) (*((unsigned long *)(SUCC_PT(bp))))
+#define GET_PRED(bp) (*((unsigned long *)(bp)))
+#define GET_SUCC(bp) (*((unsigned long *)(bp) + 1))
 
 /*global variable*/
 static char *heap_listp; /*dummy head pointer*/
@@ -140,9 +140,9 @@ void free(void *ptr){
   size_t size = GET_SIZE(HDRP(ptr));
   PUT(HDRP(ptr), PACK(size, 0));
   PUT(FTRP(ptr), PACK(size, 0));
-  for (curr = heap_listp;GET_SIZE(HDRP(curr)) > 0;curr =(char *)GET_SUCC(curr)) {
-    char *next = (char *)GET_SUCC(curr);
-    if (((void *)curr < ptr) && (ptr > (void *)next)) {
+  for (curr = heap_listp;GET_SIZE(HDRP(curr)) > 0;curr = (char *)GET_SUCC(curr)) {
+    unsigned long next = GET_SUCC(curr);
+    if (((void *)curr < ptr) && (ptr < (void *)next)) {
       PUT(PRED_PT(ptr), curr);
       PUT(SUCC_PT(ptr), next);
       PUT(SUCC_PT(curr), ptr);
@@ -251,21 +251,24 @@ static void *coalesce(void *bp)
   if (next && prev) {
     return bp;
   } else if (next && !prev) {
+     // modify link
+    PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(bp));
+    PUT(PRED_PT(GET_SUCC(bp)), PREV_BLKP(bp));
+
     size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
     PUT(HDRP(PREV_BLKP(bp)), PACK((cs + ps), 0));
     PUT(FTRP(bp), PACK(cs + ps, 0));
-    // modify link
-    PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(bp));
-    PUT(PRED_PT(GET_SUCC(bp)), PREV_BLKP(bp));
+   
     // set the bp to prev
     bp = PREV_BLKP(bp);
   } else if (!next && prev) {
-    size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
-    PUT(FTRP(NEXT_BLKP(bp)), PACK((cs + ns), 0));
-    PUT(HDRP(bp), PACK(cs + ns, 0)); 
     // modify link
     PUT(SUCC_PT(bp), GET_SUCC(NEXT_BLKP(bp)));
     PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), bp);
+
+    size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
+    PUT(FTRP(NEXT_BLKP(bp)), PACK((cs + ns), 0));
+    PUT(HDRP(bp), PACK(cs + ns, 0)); 
   } else {
     size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
     size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
@@ -309,7 +312,7 @@ static void *find_fit(size_t asize) {
 static void place(void *bp, size_t asize){
   //payload + padding should be mutiple of DSIZE
   size_t csize = GET_SIZE(HDRP(bp));
-  if ((csize - asize) >= DSIZE * 2) {
+  if ((csize - asize) >= (DSIZE * 2)) {
     PUT(HDRP(bp), PACK(asize, 1));
     PUT(FTRP(bp), PACK(asize, 1));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
