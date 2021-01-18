@@ -47,7 +47,7 @@
 
 /* Read and write word at address p*/
 #define GET(p) (*(unsigned long *)(p))
-#define PUT(p, val) (*(unsigned long *)(p) = ((unsigned long)(val)))
+#define PUT(p, val) (*(unsigned long *)(p) = (val))
 
 /*Read the size and allocated fields from address p*/
 #define GET_SIZE(p) (GET(p) & ~0xf)
@@ -66,6 +66,8 @@
 #define SUCC_PT(bp) ((char *)(bp) + WSIZE)
 #define GET_PRED(bp) (*((unsigned long *)(bp)))
 #define GET_SUCC(bp) (*((unsigned long *)(bp) + 1))
+#define SET_PRED(bp, val) ((*((unsigned long *)(bp))) = (unsigned long)(val))
+#define SET_SUCC(bp, val) ((*((unsigned long *)(bp) + 1)) = (unsigned long)(val))
 
 /*global variable*/
 static char *heap_listp; /*dummy head pointer*/
@@ -84,10 +86,10 @@ int mm_init(void)
   PUT(heap_listp, 0);/* first one word placeholder*/
   PUT(heap_listp + (WSIZE), PACK(2*DSIZE, 1));/*dummy header*/
   PUT(heap_listp + (2 * WSIZE), 0);
-  PUT(heap_listp + (3 * WSIZE), heap_listp + (6*WSIZE));
+  SET_SUCC(heap_listp + (2 * WSIZE), heap_listp + (6*WSIZE));
   PUT(heap_listp + (4 * WSIZE), PACK(2*DSIZE, 1));/*dummy footer*/
   PUT(heap_listp + (5 * WSIZE), PACK(0, 1));/*Epilogue header*/
-  PUT(heap_listp + (6 * WSIZE), heap_listp + (2*WSIZE));/*Epilogue prev*/
+  SET_PRED(heap_listp + (6 * WSIZE), heap_listp + (2*WSIZE));
   // set the heap_listp to the dummy block
   heap_listp += (2 * WSIZE);
   // extend the heap in multiple of sizeof(size_t)
@@ -133,20 +135,21 @@ void *malloc(size_t size)
  * search the free list from head to insert the free block and then coalesce
  */
 void free(void *ptr){
-	char *curr;
+	unsigned long curr;
   if (ptr == NULL || !GET_ALLOC(HDRP(ptr))) {
     return;
   }
   size_t size = GET_SIZE(HDRP(ptr));
   PUT(HDRP(ptr), PACK(size, 0));
   PUT(FTRP(ptr), PACK(size, 0));
-  for (curr = heap_listp;GET_SIZE(HDRP(curr)) > 0;curr = (char *)GET_SUCC(curr)) {
+  unsigned long p = (unsigned long)ptr;
+  for (curr = (unsigned long)heap_listp;GET_SIZE(HDRP(curr)) > 0;curr = GET_SUCC(curr)) {
     unsigned long next = GET_SUCC(curr);
-    if (((void *)curr < ptr) && (ptr < (void *)next)) {
-      PUT(PRED_PT(ptr), curr);
-      PUT(SUCC_PT(ptr), next);
-      PUT(SUCC_PT(curr), ptr);
-      PUT(PRED_PT(next), ptr);
+    if ((curr < p) && (p < next)) {
+      SET_PRED(p, curr);
+      SET_SUCC(p, next);
+      SET_SUCC(curr, p);
+      SET_PRED(next, p);
       coalesce(ptr);
       return;
     }
@@ -234,10 +237,12 @@ static void *extend_heap(size_t size)
   PUT(FTRP(bp), PACK(ext, 0));
   // pred stay the same
   // point new block to epilogue
-  PUT(SUCC_PT(bp), NEXT_BLKP(bp));
+  SET_SUCC(bp, NEXT_BLKP(bp));
+  //PUT(SUCC_PT(bp), NEXT_BLKP(bp));
   // set Epilogue
   PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
-  PUT(PRED_PT(NEXT_BLKP(bp)), bp);
+  SET_PRED(NEXT_BLKP(bp), bp);
+  //PUT(PRED_PT(NEXT_BLKP(bp)), bp);
   return coalesce(bp);
 }
 
@@ -252,9 +257,10 @@ static void *coalesce(void *bp)
     return bp;
   } else if (next && !prev) {
      // modify link
-    PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(bp));
-    PUT(PRED_PT(GET_SUCC(bp)), PREV_BLKP(bp));
-
+    // PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(bp));
+    // PUT(PRED_PT(GET_SUCC(bp)), PREV_BLKP(bp));
+    SET_SUCC(PREV_BLKP(bp), GET_SUCC(bp));
+    SET_PRED(GET_SUCC(bp), PREV_BLKP(bp));
     size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
     PUT(HDRP(PREV_BLKP(bp)), PACK((cs + ps), 0));
     PUT(FTRP(bp), PACK(cs + ps, 0));
@@ -263,21 +269,26 @@ static void *coalesce(void *bp)
     bp = PREV_BLKP(bp);
   } else if (!next && prev) {
     // modify link
-    PUT(SUCC_PT(bp), GET_SUCC(NEXT_BLKP(bp)));
-    PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), bp);
+    // PUT(SUCC_PT(bp), GET_SUCC(NEXT_BLKP(bp)));
+    // PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), bp);
+    SET_SUCC(bp, GET_SUCC(NEXT_BLKP(bp)));
+    SET_PRED(GET_SUCC(NEXT_BLKP(bp)), bp);
 
     size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
     PUT(FTRP(NEXT_BLKP(bp)), PACK((cs + ns), 0));
     PUT(HDRP(bp), PACK(cs + ns, 0)); 
   } else {
+    SET_SUCC(PREV_BLKP(bp), GET_SUCC(NEXT_BLKP(bp)));
+    SET_PRED(GET_SUCC(NEXT_BLKP(bp)), PREV_BLKP(bp));
+
     size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
     size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
     size_t s = ps + ns + cs;
     PUT(HDRP(PREV_BLKP(bp)), PACK(s, 0));
     PUT(FTRP(NEXT_BLKP(bp)), PACK(s, 0));
     // modify link
-    PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(NEXT_BLKP(bp)));
-    PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), PREV_BLKP(bp));
+    // PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(NEXT_BLKP(bp)));
+    // PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), PREV_BLKP(bp));
     bp = PREV_BLKP(bp);
   }
   return bp;
@@ -318,15 +329,20 @@ static void place(void *bp, size_t asize){
     PUT(HDRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
     PUT(FTRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
     // set link
-    PUT(PRED_PT(NEXT_BLKP(bp)), GET_PRED(bp));
-    PUT(SUCC_PT(NEXT_BLKP(bp)), GET_SUCC(bp));
-    PUT(PRED_PT(GET_SUCC(bp)), NEXT_BLKP(bp));
-    PUT(SUCC_PT(GET_PRED(bp)), NEXT_BLKP(bp));
+    // PUT(PRED_PT(NEXT_BLKP(bp)), GET_PRED(bp));
+    // PUT(SUCC_PT(NEXT_BLKP(bp)), GET_SUCC(bp));
+    // PUT(PRED_PT(GET_SUCC(bp)), NEXT_BLKP(bp));
+    // PUT(SUCC_PT(GET_PRED(bp)), NEXT_BLKP(bp));
+    SET_PRED(NEXT_BLKP(bp), GET_PRED(bp));
+    SET_SUCC(NEXT_BLKP(bp), GET_SUCC(bp));
+    SET_PRED(GET_SUCC(bp), NEXT_BLKP(bp));
+    SET_SUCC(GET_PRED(bp), NEXT_BLKP(bp));
   } else { //no splitting
     // prev -> succ
-    PUT(SUCC_PT(GET_PRED(bp)), GET_SUCC(bp));
-    PUT(PRED_PT(GET_SUCC(bp)), GET_PRED(bp));
-
+    // PUT(SUCC_PT(GET_PRED(bp)), GET_SUCC(bp));
+    // PUT(PRED_PT(GET_SUCC(bp)), GET_PRED(bp));
+    SET_SUCC(GET_PRED(bp), GET_SUCC(bp));
+    SET_PRED(GET_SUCC(bp), GET_PRED(bp));
     PUT(HDRP(bp), PACK(csize, 1));
     PUT(FTRP(bp), PACK(csize, 1));
   }
