@@ -69,32 +69,37 @@
 #define SET_PRED(bp, val) ((*((unsigned long *)(bp))) = (unsigned long)(val))
 #define SET_SUCC(bp, val) ((*((unsigned long *)(bp) + 1)) = (unsigned long)(val))
 
+/* Operations on the segregated list*/
+#define GET_HEAD(index) (*(unsigned long *)(segregatedList + (index*WSIZE))) 
+#define CLEAR(index) PUT(segregatedList + (index*WSIZE), 0)
+#define SET_HEAD(index, val) (*(unsigned long *)(segregatedList + (index*WSIZE)) = (unsigned long)(val))
 /*global variable*/
-static char *heap_listp; /*dummy head pointer*/
 static void *extend_heap(size_t size);
 static void *coalesce(void *bp); 
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
+static int find_index(size_t asize);
+static void insert(int index, char *bp);
+
+/* segregated list with size 14 denoting: 2^0 ~ above2^12
+ * note that minimum free block size:4 words = 32bytes, thus the size class for first slots is (2^4+1, 2^5)
+ * size of each cell: one word which contains the address of the first node of the free list
+ * each size class in the free list denotes the size of the whole block(payload + header + footer)
+ */
+ static char *segregatedList;
+
 
 /*
  * mm_init - Called when a new trace starts.
  */
 int mm_init(void)
 {
-  if ((heap_listp = mem_sbrk(7*WSIZE)) == (void *)-1)
-    return -1;
-  PUT(heap_listp, 0);/* first one word placeholder*/
-  PUT(heap_listp + (WSIZE), PACK(2*DSIZE, 1));/*dummy header*/
-  PUT(heap_listp + (2 * WSIZE), 0);
-  SET_SUCC(heap_listp + (2 * WSIZE), heap_listp + (6*WSIZE));
-  PUT(heap_listp + (4 * WSIZE), PACK(2*DSIZE, 1));/*dummy footer*/
-  PUT(heap_listp + (5 * WSIZE), PACK(0, 1));/*Epilogue header*/
-  SET_PRED(heap_listp + (6 * WSIZE), heap_listp + (2*WSIZE));
-  // set the heap_listp to the dummy block
-  heap_listp += (2 * WSIZE);
-  // extend the heap in multiple of sizeof(size_t)
-  if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
-    return -1;
+  // alloc an empty segregated list
+  if ((segregatedList = mem_sbrk(9*WSIZE)) == (void *)-1)
+    return -1; 
+  for (int i = 0;i < 9;i++) {
+    CLEAR(i);
+  }
   return 0;
 }
 
@@ -230,20 +235,25 @@ static void *extend_heap(size_t size)
   if ((long)(bp = mem_sbrk(ext)) ==  -1) {
     return NULL;
   }
-  bp = bp - WSIZE;
+  bp = bp + WSIZE;
   // size_t pred = GET_PRED(bp);
   // set the header and footer for the new block
   PUT(HDRP(bp), PACK(ext, 0));
   PUT(FTRP(bp), PACK(ext, 0));
-  // pred stay the same
-  // point new block to epilogue
-  SET_SUCC(bp, NEXT_BLKP(bp));
-  //PUT(SUCC_PT(bp), NEXT_BLKP(bp));
-  // set Epilogue
-  PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
-  SET_PRED(NEXT_BLKP(bp), bp);
-  //PUT(PRED_PT(NEXT_BLKP(bp)), bp);
+  // link the new block to the list
+  insert(find_index(ext), bp);
   return coalesce(bp);
+}
+
+static void insert(int index, char *bp) {
+  char *head = GET_HEAD(index);
+  SET_PRED(bp, 0);
+  //insert at the head of the list
+  if ((long)head != 0) {
+    SET_SUCC(bp, head);
+    SET_PRED(head, bp);
+  } 
+  SET_HEAD(index, bp);
 }
 
 // this function checks the prev and next block to coalesce if possible
@@ -294,23 +304,17 @@ static void *coalesce(void *bp)
   return bp;
 }
 
-// use first-fit algs 33 + 0
-// best-fit 37 + 0
-// first fit in the free list
+// first fit in the free list, asize bytes
 static void *find_fit(size_t asize) {
-  // char *best = NULL;
-  // char *curr;
-  // for (curr = heap_listp;GET_SIZE(HDRP(curr)) != 0;curr = NEXT_BLKP(curr)) {
-  //   size_t csize = GET_SIZE(HDRP(curr));
-  //   if ( (csize >= asize) && !GET_ALLOC(HDRP(curr))) {
-  //     if ((best == NULL) || ((csize - asize) < (GET_SIZE(HDRP(best)) - asize))) {
-  //       best = curr;
-  //     }
-  //   }
-  // }
-  // return best;
+  // get the index of the slot
+  // smallest power of 2 that is larger than asize
+  int index = find_index(asize);
+  unsigned long head = GET_HEAD(index);
+  if (head == 0) {
+    return NULL;
+  }
   char *bp;
-  for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = (char *)GET_SUCC(bp))
+  for (bp = (char *)head;GET_SUCC(bp) > 0; bp = (char *)GET_SUCC(bp))
     {
         if (!GET_ALLOC(HDRP(bp)) && (GET_SIZE(HDRP(bp)) >= asize))
         {
@@ -318,6 +322,16 @@ static void *find_fit(size_t asize) {
         }
     }
   return NULL;
+}
+
+static int find_index(size_t asize) {
+  unsigned long bound = 1<<5;
+  for (int index = 0;index < 8;index++){
+    if ((bound<<index) >= asize){
+      return index;
+    }
+  }
+  return 8;
 }
 
 static void place(void *bp, size_t asize){
