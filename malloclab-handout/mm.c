@@ -79,7 +79,8 @@ static void *coalesce(void *bp);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 static int find_index(size_t asize);
-static void insert(int index, char *bp);
+static void insertNode(void *bp);
+static void removeNode(void *bp);
 
 /* segregated list with size 14 denoting: 2^0 ~ above2^12
  * note that minimum free block size:4 words = 32bytes, thus the size class for first slots is (2^4+1, 2^5)
@@ -95,11 +96,15 @@ static void insert(int index, char *bp);
 int mm_init(void)
 {
   // alloc an empty segregated list
-  if ((segregatedList = mem_sbrk(9*WSIZE)) == (void *)-1)
+  if ((segregatedList = mem_sbrk(12*WSIZE)) == (void *)-1)
     return -1; 
   for (int i = 0;i < 9;i++) {
     CLEAR(i);
   }
+  // set header and footer
+  PUT(segregatedList + (9*WSIZE), PACK(2*WSIZE, 1));
+  PUT(segregatedList + (10*WSIZE), PACK(2*WSIZE, 1));
+  PUT(segregatedList + (11*WSIZE), PACK(0, 1));
   return 0;
 }
 
@@ -114,9 +119,6 @@ void *malloc(size_t size)
   size_t asize; /* add the header and footer to size and align to DSIZE*/
   size_t extendsize;
   char *bp;
-  // if (size == 0) {
-  //   return NULL;
-  // }
   if (size <= DSIZE) {
     asize = 2*DSIZE;
   } else {
@@ -137,29 +139,17 @@ void *malloc(size_t size)
 }
 
 /*
- * search the free list from head to insert the free block and then coalesce
+ * search the free list from head to insertNode the free block and then coalesce
  */
 void free(void *ptr){
-	unsigned long curr;
-  if (ptr == NULL || !GET_ALLOC(HDRP(ptr))) {
+  if (ptr == NULL) {
     return;
   }
   size_t size = GET_SIZE(HDRP(ptr));
   PUT(HDRP(ptr), PACK(size, 0));
   PUT(FTRP(ptr), PACK(size, 0));
-  unsigned long p = (unsigned long)ptr;
-  for (curr = (unsigned long)heap_listp;GET_SIZE(HDRP(curr)) > 0;curr = GET_SUCC(curr)) {
-    unsigned long next = GET_SUCC(curr);
-    if ((curr < p) && (p < next)) {
-      SET_PRED(p, curr);
-      SET_SUCC(p, next);
-      SET_SUCC(curr, p);
-      SET_PRED(next, p);
-      coalesce(ptr);
-      return;
-    }
-  }
-  
+  insertNode(ptr);  
+  coalesce(ptr);
 }
 
 /*
@@ -169,7 +159,7 @@ void free(void *ptr){
  */
 void *realloc(void *oldptr, size_t size)
 {
-  size_t oldsize;
+  size_t oldsize; 
   void *newptr;
 
   /* If size == 0 then this is just free, and we return NULL. */
@@ -235,23 +225,25 @@ static void *extend_heap(size_t size)
   if ((long)(bp = mem_sbrk(ext)) ==  -1) {
     return NULL;
   }
-  bp = bp + WSIZE;
   // size_t pred = GET_PRED(bp);
   // set the header and footer for the new block
   PUT(HDRP(bp), PACK(ext, 0));
   PUT(FTRP(bp), PACK(ext, 0));
-  // link the new block to the list
-  insert(find_index(ext), bp);
+  PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
+  insertNode(bp);
   return coalesce(bp);
 }
 
-static void insert(int index, char *bp) {
-  char *head = GET_HEAD(index);
-  SET_PRED(bp, 0);
-  //insert at the head of the list
+static void insertNode(void *bp) {
+  int index = find_index(GET_SIZE(bp));
+  char *head = (char *)GET_HEAD(index);
+  // SET_PRED(bp, segregatedList + (index*WSIZE));
+  //insertNode at the head of the list
   if ((long)head != 0) {
     SET_SUCC(bp, head);
     SET_PRED(head, bp);
+  } else {
+    SET_SUCC(bp, 0);
   } 
   SET_HEAD(index, bp);
 }
@@ -266,42 +258,52 @@ static void *coalesce(void *bp)
   if (next && prev) {
     return bp;
   } else if (next && !prev) {
-     // modify link
-    // PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(bp));
-    // PUT(PRED_PT(GET_SUCC(bp)), PREV_BLKP(bp));
-    SET_SUCC(PREV_BLKP(bp), GET_SUCC(bp));
-    SET_PRED(GET_SUCC(bp), PREV_BLKP(bp));
     size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
+    // remove prev and curr from free list
+    removeNode(PREV_BLKP(bp));
+    removeNode(bp);
+    // merge
     PUT(HDRP(PREV_BLKP(bp)), PACK((cs + ps), 0));
     PUT(FTRP(bp), PACK(cs + ps, 0));
-   
-    // set the bp to prev
     bp = PREV_BLKP(bp);
+    insertNode(bp);
   } else if (!next && prev) {
     // modify link
-    // PUT(SUCC_PT(bp), GET_SUCC(NEXT_BLKP(bp)));
-    // PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), bp);
-    SET_SUCC(bp, GET_SUCC(NEXT_BLKP(bp)));
-    SET_PRED(GET_SUCC(NEXT_BLKP(bp)), bp);
-
+    removeNode(NEXT_BLKP(bp));
+    removeNode(bp);
     size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
     PUT(FTRP(NEXT_BLKP(bp)), PACK((cs + ns), 0));
     PUT(HDRP(bp), PACK(cs + ns, 0)); 
+    insertNode(bp);
   } else {
-    SET_SUCC(PREV_BLKP(bp), GET_SUCC(NEXT_BLKP(bp)));
-    SET_PRED(GET_SUCC(NEXT_BLKP(bp)), PREV_BLKP(bp));
-
+    removeNode(PREV_BLKP(bp));
+    removeNode(NEXT_BLKP(bp));
+    removeNode(bp);
     size_t ps = GET_SIZE(HDRP(PREV_BLKP(bp)));
     size_t ns = GET_SIZE(HDRP(NEXT_BLKP(bp)));
     size_t s = ps + ns + cs;
     PUT(HDRP(PREV_BLKP(bp)), PACK(s, 0));
     PUT(FTRP(NEXT_BLKP(bp)), PACK(s, 0));
-    // modify link
-    // PUT(SUCC_PT(PREV_BLKP(bp)), GET_SUCC(NEXT_BLKP(bp)));
-    // PUT(PRED_PT(GET_SUCC(NEXT_BLKP(bp))), PREV_BLKP(bp));
     bp = PREV_BLKP(bp);
+    insertNode(bp);
   }
   return bp;
+}
+
+static void removeNode(void *bp){
+  int index = find_index(GET_SIZE(bp));
+  if (GET_HEAD(index) == (unsigned long)bp) {
+    if (GET_SUCC(bp) == 0) {
+      CLEAR(index);
+    } else {
+      SET_HEAD(index, GET_SUCC(bp));
+    }
+  } else if (GET_SUCC(bp) == 0) {
+    SET_SUCC(GET_PRED(bp), 0);
+  } else {
+    SET_SUCC(GET_PRED(bp), GET_SUCC(bp));
+    SET_PRED(GET_SUCC(bp), GET_PRED(bp));
+  }
 }
 
 // first fit in the free list, asize bytes
@@ -309,25 +311,26 @@ static void *find_fit(size_t asize) {
   // get the index of the slot
   // smallest power of 2 that is larger than asize
   int index = find_index(asize);
-  unsigned long head = GET_HEAD(index);
-  if (head == 0) {
-    return NULL;
-  }
-  char *bp;
-  for (bp = (char *)head;GET_SUCC(bp) > 0; bp = (char *)GET_SUCC(bp))
-    {
+  for (int i = index;i < 9;i++) {
+    unsigned long head = GET_HEAD(i);
+    if (head != 0) {
+      char *bp;
+      for (bp = (char *)head;(unsigned long)bp > 0; bp = (char *)GET_SUCC(bp))
+      {
         if (!GET_ALLOC(HDRP(bp)) && (GET_SIZE(HDRP(bp)) >= asize))
         {
             return bp;
         }
+      }
     }
+  }
   return NULL;
 }
 
 static int find_index(size_t asize) {
-  unsigned long bound = 1<<5;
+  unsigned long bound = 5;
   for (int index = 0;index < 8;index++){
-    if ((bound<<index) >= asize){
+    if ((unsigned long)(1<<(index + bound)) >= asize){
       return index;
     }
   }
@@ -337,26 +340,14 @@ static int find_index(size_t asize) {
 static void place(void *bp, size_t asize){
   //payload + padding should be mutiple of DSIZE
   size_t csize = GET_SIZE(HDRP(bp));
+  removeNode(bp);
   if ((csize - asize) >= (DSIZE * 2)) {
     PUT(HDRP(bp), PACK(asize, 1));
     PUT(FTRP(bp), PACK(asize, 1));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
     PUT(FTRP(NEXT_BLKP(bp)), PACK(csize - asize, 0));
-    // set link
-    // PUT(PRED_PT(NEXT_BLKP(bp)), GET_PRED(bp));
-    // PUT(SUCC_PT(NEXT_BLKP(bp)), GET_SUCC(bp));
-    // PUT(PRED_PT(GET_SUCC(bp)), NEXT_BLKP(bp));
-    // PUT(SUCC_PT(GET_PRED(bp)), NEXT_BLKP(bp));
-    SET_PRED(NEXT_BLKP(bp), GET_PRED(bp));
-    SET_SUCC(NEXT_BLKP(bp), GET_SUCC(bp));
-    SET_PRED(GET_SUCC(bp), NEXT_BLKP(bp));
-    SET_SUCC(GET_PRED(bp), NEXT_BLKP(bp));
+    insertNode(NEXT_BLKP(bp));
   } else { //no splitting
-    // prev -> succ
-    // PUT(SUCC_PT(GET_PRED(bp)), GET_SUCC(bp));
-    // PUT(PRED_PT(GET_SUCC(bp)), GET_PRED(bp));
-    SET_SUCC(GET_PRED(bp), GET_SUCC(bp));
-    SET_PRED(GET_SUCC(bp), GET_PRED(bp));
     PUT(HDRP(bp), PACK(csize, 1));
     PUT(FTRP(bp), PACK(csize, 1));
   }
