@@ -73,6 +73,9 @@
 #define GET_HEAD(index) (*(unsigned long *)(segregatedList + (index*WSIZE))) 
 #define CLEAR(index) SET_HEAD(index, 0)
 #define SET_HEAD(index, val) (*(unsigned long *)(segregatedList + (index*WSIZE)) = (unsigned long)(val))
+#define SET_HEAD_BIT(bp) PUT(HDRP(bp),PACK(GET(HDRP(bp)), 0x2))
+#define GET_HEAD_BIT(bp) ((GET(HDRP(bp))>>1) & 0x1)
+#define CLEAR_HEAD_BIT(bp) PUT(HDRP(bp), GET(HDRP(bp)) & ~0x2)
 /*global variable*/
 static void *extend_heap(size_t size);
 static void *coalesce(void *bp); 
@@ -304,10 +307,13 @@ static void insertNode(void *bp) {
   if ((long)head != 0) {
     SET_SUCC(bp, head);
     SET_PRED(head, bp);
+    CLEAR_HEAD_BIT(head);
   } else {
     SET_SUCC(bp, 0);
   } 
   SET_HEAD(index, bp);
+  SET_PRED(bp, segregatedList + (index*WSIZE));//head
+  SET_HEAD_BIT(bp);
 }
 
 // this function checks the prev and next block to coalesce if possible
@@ -353,9 +359,13 @@ static void *coalesce(void *bp)
 }
 
 static void removeNode(void *bp){
-  int index = find_index(GET_SIZE(HDRP(bp)));
-  if (GET_HEAD(index) == (unsigned long)bp) {
-    SET_HEAD(index, GET_SUCC(bp));
+  if (GET_HEAD_BIT(bp)) {
+    PUT(GET_PRED(bp), GET_SUCC(bp));
+    CLEAR_HEAD_BIT(bp);
+    if (GET_SUCC(bp) != 0) {
+      SET_HEAD_BIT(GET_SUCC(bp));
+      SET_PRED(GET_SUCC(bp), GET_PRED(bp));
+    }
   } else if (GET_SUCC(bp) == 0) {//tail
     SET_SUCC(GET_PRED(bp), 0);
   } else {
