@@ -193,7 +193,6 @@ void *realloc(void *oldptr, size_t size)
     } 
     return oldptr;
   }
-  free(oldptr);
   newptr = malloc(size);
   /* If realloc() fails the original block is left untouched  */
   if(!newptr) {
@@ -202,6 +201,7 @@ void *realloc(void *oldptr, size_t size)
   /* Copy the old data. */
   // bug: old size is the blocksize, we should only copy the payload
   memcpy(newptr, oldptr, oldsize - WSIZE*2);
+  free(oldptr);// free will set succ and pred so must after the memcpy
   return newptr;
 }
 
