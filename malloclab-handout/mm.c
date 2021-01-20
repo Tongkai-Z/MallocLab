@@ -39,7 +39,7 @@
 
 #define WSIZE 8 /*Word and header/footer size(bytes) in 64 bit machine*/
 #define DSIZE 16  
-#define CHUNKSIZE (1<<12) /*one extension of heap*/
+#define CHUNKSIZE (1<<6) /*one extension of heap*/
 #define MAX(x, y) ((x) > (y)? (x) : (y))
 
 /* Pack a size and allocated bit into a word */
