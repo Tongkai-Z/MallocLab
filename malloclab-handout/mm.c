@@ -259,6 +259,20 @@ void mm_checkheap(int verbose){
     printf("%s%ld\n", "number of blocks:", count);
     printf("%s%lx\n", "Epilogue:", (unsigned long)(curr - WSIZE));
   }
+  // check free list
+  for (int i = 0;i < 9;i++) {
+    unsigned long head = GET_HEAD(i);
+    if (head != 0) {
+      char *bp;
+      for (bp = (char *)head;(unsigned long)bp > 0; bp = (char *)GET_SUCC(bp))
+      {
+        if (GET_ALLOC(HDRP(bp)))
+        {
+            printf("%s\n", "free list has allocated blocks");
+        }
+      }
+    }
+  }
 
 }
 
@@ -360,12 +374,18 @@ static void *find_fit(size_t asize) {
     unsigned long head = GET_HEAD(i);
     if (head != 0) {
       char *bp;
+      char *best = NULL;
       for (bp = (char *)head;(unsigned long)bp > 0; bp = (char *)GET_SUCC(bp))
       {
-        if (!GET_ALLOC(HDRP(bp)) && (GET_SIZE(HDRP(bp)) >= asize))
+        if (GET_SIZE(HDRP(bp)) >= asize)
         {
-            return bp;
+            if (best == NULL || ((GET_SIZE(HDRP(bp)) - asize) < (GET_SIZE(HDRP(best)) - asize))) {
+              best = bp;
+            }
         }
+      }
+      if (best != NULL) {
+        return best;
       }
     }
   }
