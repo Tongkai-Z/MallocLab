@@ -71,7 +71,7 @@
 
 /* Operations on the segregated list*/
 #define GET_HEAD(index) (*(unsigned long *)(segregatedList + (index*WSIZE))) 
-#define CLEAR(index) PUT(segregatedList + (index*WSIZE), 0)
+#define CLEAR(index) SET_HEAD(index, 0)
 #define SET_HEAD(index, val) (*(unsigned long *)(segregatedList + (index*WSIZE)) = (unsigned long)(val))
 /*global variable*/
 static void *extend_heap(size_t size);
@@ -96,7 +96,7 @@ static void removeNode(void *bp);
 int mm_init(void)
 {
   // alloc an empty segregated list
-  if ((segregatedList = mem_sbrk(12*WSIZE)) == (void *)-1)
+  if ((segregatedList = (char *)mem_sbrk(12*WSIZE)) == (char *)-1)
     return -1; 
   for (int i = 0;i < 9;i++) {
     CLEAR(i);
@@ -119,10 +119,10 @@ void *malloc(size_t size)
   size_t asize; /* add the header and footer to size and align to DSIZE*/
   size_t extendsize;
   char *bp;
-  if (size <= DSIZE) {
+  if (size <= DSIZE) {//16
     asize = 2*DSIZE;
   } else {
-    //ceil((size + WSIZE * 2)/WSIZE) * WSIZE
+    //ceil((size + WSIZE * 2)/DSIZE) * DSIZE
     // payload + padding should be mutiple of DSIZE
     asize = ((size + DSIZE + DSIZE - 1)/DSIZE) * DSIZE;
   }
@@ -221,7 +221,7 @@ static void *extend_heap(size_t size)
   size_t ext;
   // convert the size to byte
   // round up the size to meet the double words alignment requirement
-  ext = (size % 2)? WSIZE * (size + 1) : WSIZE * size;
+  ext = (size % 2)? (WSIZE * (size + 1)): (WSIZE * size);
   if ((long)(bp = mem_sbrk(ext)) ==  -1) {
     return NULL;
   }
@@ -293,12 +293,13 @@ static void *coalesce(void *bp)
 static void removeNode(void *bp){
   int index = find_index(GET_SIZE(bp));
   if (GET_HEAD(index) == (unsigned long)bp) {
-    if (GET_SUCC(bp) == 0) {
-      CLEAR(index);
-    } else {
-      SET_HEAD(index, GET_SUCC(bp));
-    }
-  } else if (GET_SUCC(bp) == 0) {
+    // if (GET_SUCC(bp) == 0) {// only node in the lst
+    //   CLEAR(index);
+    // } else {
+    //   SET_HEAD(index, GET_SUCC(bp));
+    // }
+    SET_HEAD(index, GET_SUCC(bp));
+  } else if (GET_SUCC(bp) == 0) {//tail
     SET_SUCC(GET_PRED(bp), 0);
   } else {
     SET_SUCC(GET_PRED(bp), GET_SUCC(bp));
@@ -330,7 +331,7 @@ static void *find_fit(size_t asize) {
 static int find_index(size_t asize) {
   unsigned long bound = 5;
   for (int index = 0;index < 8;index++){
-    if ((unsigned long)(1<<(index + bound)) >= asize){
+    if (((unsigned long)1<<(index + bound)) >= asize){
       return index;
     }
   }
