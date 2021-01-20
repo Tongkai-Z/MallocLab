@@ -155,12 +155,13 @@ void free(void *ptr){
 
 /*
  * realloc - Change the size of the block by mallocing a new block,
- *      copying its data, and freeing the old block.  I'm too lazy
- *      to do better.
+ *      copying its data, and freeing the old block. 
+ * optimization: if the size is smaller, we use the current one and possibly split it
  */
 void *realloc(void *oldptr, size_t size)
 {
-  size_t oldsize; 
+  unsigned long oldsize; 
+  unsigned long asize;//alignment
   void *newptr;
 
   /* If size == 0 then this is just free, and we return NULL. */
@@ -173,22 +174,34 @@ void *realloc(void *oldptr, size_t size)
   if(oldptr == NULL) {
     return malloc(size);
   }
-
+  oldsize = GET_SIZE(HDRP(oldptr));
+  if (size <= DSIZE) {//16
+    asize = 2*DSIZE;
+  } else {
+    asize = ((size + DSIZE + DSIZE - 1)/DSIZE) * DSIZE;
+  }
+  if (asize == oldsize) {
+    return oldptr;
+  }
+  if (asize < oldsize) {//check if split or not
+    if ((oldsize - asize) >= (DSIZE*2)) {
+      PUT(HDRP(oldptr), PACK(asize, 1));
+      PUT(FTRP(oldptr), PACK(asize, 1));
+      PUT(HDRP(NEXT_BLKP(oldptr)), PACK(oldsize - asize, 0));
+      PUT(FTRP(NEXT_BLKP(oldptr)), PACK(oldsize - asize, 0));
+      insertNode(NEXT_BLKP(oldptr));
+    } 
+    return oldptr;
+  }
+  free(oldptr);
   newptr = malloc(size);
-
   /* If realloc() fails the original block is left untouched  */
   if(!newptr) {
     return 0;
   }
-
   /* Copy the old data. */
-  oldsize = GET_SIZE(HDRP(oldptr));
-  if(size < oldsize) oldsize = size;
-  memcpy(newptr, oldptr, oldsize);
-
-  /* Free the old block. */
-  free(oldptr);
-
+  // bug: old size is the blocksize, we should only copy the payload
+  memcpy(newptr, oldptr, oldsize - WSIZE*2);
   return newptr;
 }
 
@@ -328,11 +341,6 @@ static void *coalesce(void *bp)
 static void removeNode(void *bp){
   int index = find_index(GET_SIZE(HDRP(bp)));
   if (GET_HEAD(index) == (unsigned long)bp) {
-    // if (GET_SUCC(bp) == 0) {// only node in the lst
-    //   CLEAR(index);
-    // } else {
-    //   SET_HEAD(index, GET_SUCC(bp));
-    // }
     SET_HEAD(index, GET_SUCC(bp));
   } else if (GET_SUCC(bp) == 0) {//tail
     SET_SUCC(GET_PRED(bp), 0);
@@ -343,6 +351,7 @@ static void removeNode(void *bp){
 }
 
 // first fit in the free list, asize bytes
+// change to best fit 
 static void *find_fit(size_t asize) {
   // get the index of the slot
   // smallest power of 2 that is larger than asize
