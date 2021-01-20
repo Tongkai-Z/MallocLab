@@ -87,8 +87,8 @@ static void removeNode(void *bp);
  * size of each cell: one word which contains the address of the first node of the free list
  * each size class in the free list denotes the size of the whole block(payload + header + footer)
  */
- static char *segregatedList;
-
+static char *segregatedList;
+static char *heap_lstp;
 
 /*
  * mm_init - Called when a new trace starts.
@@ -105,6 +105,7 @@ int mm_init(void)
   PUT(segregatedList + (9*WSIZE), PACK(2*WSIZE, 1));
   PUT(segregatedList + (10*WSIZE), PACK(2*WSIZE, 1));
   PUT(segregatedList + (11*WSIZE), PACK(0, 1));
+  heap_lstp = segregatedList + (10*WSIZE);
   return 0;
 }
 
@@ -210,8 +211,44 @@ void *calloc (size_t nmemb, size_t size)
  *      so nah!
  */
 void mm_checkheap(int verbose){
-	/*Get gcc to be quiet. */
-  printf("%d", verbose);
+  char *lo = mem_heap_lo();
+  char *hi = mem_heap_hi();
+	//block level
+  if (verbose) {
+    printf("%s\n", "Check Heap:");
+    printf("Heap: low:%lx high:%lx size:%ld bytes\n", (unsigned long)lo, (unsigned long)hi, (unsigned long)hi - (unsigned long)lo + 1);
+  }
+  if (GET_SIZE(heap_lstp) != 2*WSIZE || !GET_ALLOC(heap_lstp)){
+    printf("%s\n", "Invalid Prologue");
+  }
+  //iterate the block list
+  unsigned long count = 0;
+  char *curr;
+  for (curr = heap_lstp;GET_SIZE(curr) > 0;curr = NEXT_BLKP(curr)){
+    if (((unsigned long)curr) % 16 != 0) {
+      printf("%s\n", "wrong alignment");
+    }
+    if ((GET(HDRP(curr)) & ~0xf) != (GET(FTRP(curr)) & ~0xf)) {
+      printf("%s\n", "Inconsistency in header and footer size");
+    }
+    if ((GET(HDRP(curr)) & ~0x1) != (GET(FTRP(curr)) & ~0x1)) {
+      printf("%s\n", "Inconsistency in header and footer alloc bit");
+    }
+    count++;
+  }
+  if (GET_SIZE(HDRP(curr)) != 0 || !GET_ALLOC(HDRP(curr))) {
+    printf("%s\n", "Invalid Epilogue");
+    printf("%s%lx\n", "Epilogue Size:", GET_SIZE(curr));
+    printf("%s%lx\n", "Epilogue Alloc bit:", GET_ALLOC(curr));
+  }
+  if (curr != mem_heap_hi() + 1) {
+    printf("%s%lx\n", "Epilogue not the last byte:", (unsigned long)curr);
+  }
+  count++;
+  if (verbose) {
+    printf("%s%ld\n", "number of blocks:", count);
+  }
+
 }
 
 /*input is the number of words*/
