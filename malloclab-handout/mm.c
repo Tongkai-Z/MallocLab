@@ -218,13 +218,13 @@ void mm_checkheap(int verbose){
     printf("%s\n", "Check Heap:");
     printf("Heap: low:%lx high:%lx size:%ld bytes\n", (unsigned long)lo, (unsigned long)hi, (unsigned long)hi - (unsigned long)lo + 1);
   }
-  if (GET_SIZE(heap_lstp) != 2*WSIZE || !GET_ALLOC(heap_lstp)){
+  if (GET_SIZE(HDRP(heap_lstp)) != 2*WSIZE || !GET_ALLOC(HDRP(heap_lstp))){
     printf("%s\n", "Invalid Prologue");
   }
   //iterate the block list
   unsigned long count = 0;
   char *curr;
-  for (curr = heap_lstp;GET_SIZE(curr) > 0;curr = NEXT_BLKP(curr)){
+  for (curr = heap_lstp;GET_SIZE(HDRP(curr)) > 0;curr = NEXT_BLKP(curr)){
     if (((unsigned long)curr) % 16 != 0) {
       printf("%s\n", "wrong alignment");
     }
@@ -241,12 +241,10 @@ void mm_checkheap(int verbose){
     printf("%s%lx\n", "Epilogue Size:", GET_SIZE(curr));
     printf("%s%lx\n", "Epilogue Alloc bit:", GET_ALLOC(curr));
   }
-  if (curr != mem_heap_hi() + 1) {
-    printf("%s%lx\n", "Epilogue not the last byte:", (unsigned long)curr);
-  }
   count++;
   if (verbose) {
     printf("%s%ld\n", "number of blocks:", count);
+    printf("%s%lx\n", "Epilogue:", (unsigned long)(curr - WSIZE));
   }
 
 }
@@ -272,7 +270,7 @@ static void *extend_heap(size_t size)
 }
 
 static void insertNode(void *bp) {
-  int index = find_index(GET_SIZE(bp));
+  int index = find_index(GET_SIZE(HDRP(bp)));
   char *head = (char *)GET_HEAD(index);
   // SET_PRED(bp, segregatedList + (index*WSIZE));
   //insertNode at the head of the list
@@ -328,7 +326,7 @@ static void *coalesce(void *bp)
 }
 
 static void removeNode(void *bp){
-  int index = find_index(GET_SIZE(bp));
+  int index = find_index(GET_SIZE(HDRP(bp)));
   if (GET_HEAD(index) == (unsigned long)bp) {
     // if (GET_SUCC(bp) == 0) {// only node in the lst
     //   CLEAR(index);
