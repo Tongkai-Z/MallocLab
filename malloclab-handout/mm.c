@@ -374,18 +374,12 @@ static void *find_fit(size_t asize) {
     unsigned long head = GET_HEAD(i);
     if (head != 0) {
       char *bp;
-      char *best = NULL;
       for (bp = (char *)head;(unsigned long)bp > 0; bp = (char *)GET_SUCC(bp))
       {
         if (GET_SIZE(HDRP(bp)) >= asize)
         {
-            if (best == NULL || ((GET_SIZE(HDRP(bp)) - asize) < (GET_SIZE(HDRP(best)) - asize))) {
-              best = bp;
-            }
+           return bp;
         }
-      }
-      if (best != NULL) {
-        return best;
       }
     }
   }
