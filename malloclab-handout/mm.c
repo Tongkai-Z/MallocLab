@@ -84,6 +84,7 @@ static void place(void *bp, size_t asize);
 static int find_index(size_t asize);
 static void insertNode(void *bp);
 static void removeNode(void *bp);
+static void *get_list_pred(char *head, char *bp);
 
 /* segregated list with size 14 denoting: 2^0 ~ above2^12
  * note that minimum free block size:4 words = 32bytes, thus the size class for first slots is (2^4+1, 2^5)
@@ -299,21 +300,47 @@ static void *extend_heap(size_t size)
   return coalesce(bp);
 }
 
+// optimization: size order in each lst
 static void insertNode(void *bp) {
   int index = find_index(GET_SIZE(HDRP(bp)));
   char *head = (char *)GET_HEAD(index);
-  // SET_PRED(bp, segregatedList + (index*WSIZE));
-  //insertNode at the head of the list
-  if ((long)head != 0) {
-    SET_SUCC(bp, head);
-    SET_PRED(head, bp);
-    CLEAR_HEAD_BIT(head);
-  } else {
+  if ((long)head != 0) {//find the correct location
+    char *pred = get_list_pred(head, bp);
+    // smallest
+    if (pred == (char *)0) {
+      SET_SUCC(bp, head);
+      SET_PRED(head, bp);
+      SET_PRED(bp, segregatedList + (index*WSIZE));//head
+      SET_HEAD(index, bp);
+      SET_HEAD_BIT(bp);
+      CLEAR_HEAD_BIT(head);
+    } else {
+      SET_SUCC(bp, GET_SUCC(pred));
+      if (GET_SUCC(pred) != 0) {
+        SET_PRED(GET_SUCC(pred), bp);
+      }
+      SET_SUCC(pred, bp);
+      SET_PRED(bp, pred);
+    }
+  } else {//set head
     SET_SUCC(bp, 0);
+    SET_HEAD(index, bp);
+    SET_PRED(bp, segregatedList + (index*WSIZE));//head
+    SET_HEAD_BIT(bp);
   } 
-  SET_HEAD(index, bp);
-  SET_PRED(bp, segregatedList + (index*WSIZE));//head
-  SET_HEAD_BIT(bp);
+}
+
+static void *get_list_pred(char *head, char *bp) {
+  size_t size = GET_SIZE(HDRP(bp));
+  if (GET_SIZE(HDRP(head)) >= size) {
+    return (void *)0;
+  }
+  for (;GET_SUCC(head) != 0;head = (char *)GET_SUCC(head)){
+    if (GET_SIZE(HDRP(GET_SUCC(head))) >= size) {
+      return head;
+    }
+  }
+  return head;
 }
 
 // this function checks the prev and next block to coalesce if possible
