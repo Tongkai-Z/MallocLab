@@ -247,7 +247,7 @@ void mm_checkheap(int verbose){
     if ((GET(HDRP(curr)) & ~0xf) != (GET(FTRP(curr)) & ~0xf)) {
       printf("%s\n", "Inconsistency in header and footer size");
     }
-    if ((GET(HDRP(curr)) & ~0x1) != (GET(FTRP(curr)) & ~0x1)) {
+    if ((GET(HDRP(curr)) & 0x1) != (GET(FTRP(curr)) & 0x1)) {
       printf("%s\n", "Inconsistency in header and footer alloc bit");
     }
     count++;
