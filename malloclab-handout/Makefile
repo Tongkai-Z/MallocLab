@@ -1,48 +1,24 @@
+#
+# Makefile for the malloc lab driver
+#
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -g -DDRIVER
 
-all: synthetic-traces balanced-traces check-balance
+OBJS = mdriver.o mm.o memlib.o fsecs.o fcyc.o clock.o ftimer.o driverlib.o
 
-CC=gcc
-CFLAGS=-g -O2 -W -Wall -fPIC
+all: mdriver
 
-get-trace.so: get-trace.c
-	$(CC) $(CFLAGS) $< -shared -o $@ -ldl
+mdriver: $(OBJS)
+	$(CC) $(CFLAGS) -o mdriver $(OBJS)
 
-synthetic-traces:
-	./gen_binary.pl
-	./gen_binary2.pl
-	./gen_coalescing.pl
-	./gen_random.pl
-	./gen_realloc.pl
-	./gen_realloc2.pl
+mdriver.o: mdriver.c fsecs.h fcyc.h clock.h memlib.h config.h mm.h driverlib.h
+memlib.o: memlib.c memlib.h
+mm.o: mm.c mm.h memlib.h
+fsecs.o: fsecs.c fsecs.h config.h
+fcyc.o: fcyc.c fcyc.h
+ftimer.o: ftimer.c ftimer.h config.h
+clock.o: clock.c clock.h
+driverlib.o: driverlib.c driverlib.h
 
-balanced-traces:
-	./checktrace.pl < amptjp.rep > amptjp-bal.rep
-	./checktrace.pl < binary.rep > binary-bal.rep
-	./checktrace.pl < binary2.rep > binary2-bal.rep
-	./checktrace.pl < cccp.rep > cccp-bal.rep
-	./checktrace.pl < coalescing.rep > coalescing-bal.rep
-	./checktrace.pl < cp-decl.rep > cp-decl-bal.rep
-	./checktrace.pl < expr.rep > expr-bal.rep
-	./checktrace.pl < realloc.rep > realloc-bal.rep
-	./checktrace.pl < realloc2.rep > realloc2-bal.rep
-	./checktrace.pl < random.rep > random-bal.rep
-	./checktrace.pl < random2.rep > random2-bal.rep
-	./checktrace.pl < short1.rep > short1-bal.rep
-	./checktrace.pl < short2.rep > short2-bal.rep
-
-check-balance:
-	./checktrace.pl -s < amptjp-bal.rep
-	./checktrace.pl -s < binary-bal.rep
-	./checktrace.pl -s < binary2-bal.rep
-	./checktrace.pl -s < cccp-bal.rep
-	./checktrace.pl -s < coalescing-bal.rep
-	./checktrace.pl -s < cp-decl-bal.rep
-	./checktrace.pl -s < expr-bal.rep
-	./checktrace.pl -s < realloc-bal.rep
-	./checktrace.pl -s < realloc2-bal.rep
-	./checktrace.pl -s < random-bal.rep
-	./checktrace.pl -s < random2-bal.rep
-	./checktrace.pl -s < short1-bal.rep
-	./checktrace.pl -s < short2-bal.rep
 clean:
-	rm -f *~
+	rm -f *~ *.o mdriver
